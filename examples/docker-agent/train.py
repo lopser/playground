@@ -59,16 +59,15 @@ class Net(nn.Module):
             nn.ReLU(),
         )
         self.nseq2 = nn.Sequential(
-            nn.Linear(1740, 512),
+            nn.Linear(1740, 256),
             nn.ReLU(),
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Linear(256, 32),
-            nn.ReLU(),
-            nn.Linear(32, 16),
-            nn.ReLU(),
-            nn.Linear(16, 6),
+            nn.Linear(256, 6)
         )
+        self.mlp = nn.Sequential(nn.Linear(x_feature + output_channels + 31, 128),
+                                  nn.Tanh(),
+                                  nn.Linear(128, 3),
+                                  nn.Tanh()
+                                  )
 
     def forward(self, obs):
         obs = obs.reshape((-1, 1464))
@@ -90,6 +89,45 @@ class Net(nn.Module):
         # print(board.shape)
         # obs = torch.cat([board, obs[:, 363:366]], dim=1)
         return self.nseq2(seq2_input)
+
+class MLP(nn.Module):
+    def __init__(self, output_channels, x_feature):
+        super(MLP, self).__init__()
+        self.mlp1 = nn.Sequential(nn.Linear(x_feature + output_channels + 31, 128),
+                                  nn.Tanh(),
+                                  nn.Linear(128, 3),
+                                  nn.Tanh()
+                                  )
+
+    def forward(self, h):
+        h = h.permute(0, 2, 1)
+        tmp_rs = []
+        for i in range(h.shape[-1]):
+            tmp_rs.append(self.mlp1(h[:, :, i]).unsqueeze(1))
+        out = torch.cat(tmp_rs, dim=1)
+        out = torch.sum(out, dim=1)
+        return torch.sigmoid(out)
+'''
+class Net(nn.Module):
+    def __init__(self, x_feature, ggrn_out_feature, ggrn_num_layer):
+        super(Net, self).__init__()
+        self.ggnn = GatedGraphConv(in_feats=x_feature, out_feats=ggrn_out_feature, n_steps=ggrn_num_layer, n_etypes=4)
+        self.linear = MLP(ggrn_out_feature, x_feature)
+
+    def forward(self, x, per_node, etype, judge):
+        if torch.cuda.is_available():
+            etype = etype.to(device)
+        ori_x = x.ndata['x']
+        outputs = self.ggnn(x, x.ndata['x'], etype)
+        outputs = torch.cat([outputs, ori_x], dim=1)
+        outputs = torch.split(outputs, per_node.cpu().numpy().tolist(), dim=0)
+        outputs = rnn_utils.pad_sequence(outputs, batch_first=True)
+        judge = judge.unsqueeze(1)
+        judge = judge.repeat(1, outputs.shape[1], 1)
+        outputs = torch.cat([outputs, judge], dim=-1)
+        outputs = self.linear(outputs)
+        return outputs
+'''
 
 
 class DQN(nn.Module):
@@ -200,7 +238,7 @@ class DQNAgent(agents.BaseAgent):
         self.obs_fps.append(obs)
         obs = torch.cat(self.obs_fps[-4:])
         sample = random.random()
-        if sample > 1000.0 / (global_step + 0.1):
+        if(1000.0 / (sample + 0.1)) <sample:
             re_action = self.model.policy_net(obs).argmax().item()
             return re_action
         else:
@@ -221,7 +259,7 @@ if __name__ == "__main__":
         a
     ]
     env = pommerman.make('PommeFFACompetition-v0', agent_list)
-    num_episodes = 100001
+    num_episodes = 1000
     for i_episode in range(num_episodes):
 
         # Initialize the environment and state

@@ -1,7 +1,7 @@
 '''An example to show how to set up an pommerman game programmatically'''
 import pommerman
 from pommerman import agents
-
+from train import *
 
 def main():
     '''Simple function to bootstrap a game.
@@ -16,7 +16,7 @@ def main():
         agents.SimpleAgent(),
         agents.SimpleAgent(),
         agents.SimpleAgent(),
-        agents.DockerAgent("pommerman/simple-agent", port=12345),
+        DQNAgent(DQN()),
     ]
     # Make the "Free-For-All" environment using the agent list
     env = pommerman.make('PommeFFACompetition-v0', agent_list)
